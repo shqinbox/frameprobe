@@ -21,7 +21,7 @@ def evaluate_clinical_case(
     expected_answer: str,
     evaluator: str,
     tolerance: float,
-    condition_id: str = "R0_A0_U0_O0"  # Defaults to neutral baseline,
+    condition_id: str = "R0_A0_U0_O0", 
     **kwargs
 ) -> dict:
     """
