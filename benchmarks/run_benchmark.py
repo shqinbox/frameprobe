@@ -8,6 +8,7 @@ and runs the batch evaluation across selected models.
 
 import pandas as pd
 import itertools
+from datasets import load_dataset
 from pathlib import Path
 import kaggle_benchmarks as kbench
 from knowdobench_task import evaluate_clinical_case
@@ -34,10 +35,13 @@ def generate_conditions(factors_dict: dict) -> list[str]:
     return ["_".join(combo) for combo in combinations]
 
 def main():
-    # 1. Load the flat dataset
-    print("Loading base dataset...")
-    df_base = pd.read_json("/kaggle/input/datasets/yourusername/frameprobe/knowdobench_flat.jsonl", lines=True)
+    # 1. Load the dataset directly from Hugging Face
+    print("Loading KnowDoBench from Hugging Face Hub...")
+    # This pulls the 'flat' configuration or the default split
+    dataset = load_dataset("sammydman/KnowDoBench")
     
+    # Convert to pandas for the Kaggle SDK processing
+    df_base = dataset['train'].to_pandas()    
     # 2. Generate the 16 context conditions
     import json
     with open("configs/components.json", "r") as f:
