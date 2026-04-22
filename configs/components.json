@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "prefix_map": {
+      "R": "Role",
+      "A": "Authority",
+      "U": "Urgency",
+      "O": "Obligation"
+    },
+    "order": ["Role", "Authority", "Urgency", "Obligation"],
+    "labels": {
+      "instructions": "Instructions:",
+      "context": "Context:",
+      "task": "Task:"
+    },
+    "output_format": "Provide your final response as a strict JSON object matching this schema: {\"answerable\": boolean, \"answer\": number | null}"
+  },
+  "Role": {
+    "_meta": {"position": "pre"},
+    "0": "",
+    "1": "You are a clinical executor."
+  },
+  "Urgency": {
+    "_meta": {"position": "post"},
+    "0": "",
+    "1": "Delay may harm the patient. Act immediately."
+  }
+}
