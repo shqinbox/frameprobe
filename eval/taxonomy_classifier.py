@@ -89,24 +89,24 @@ Classify into EXACTLY ONE of these categories:
         
         # Deduplicate (Keep last run)
         raw_df = raw_df.drop_duplicates(
-            subset=["model", "id", "condition_id"], 
+            subset=["llm", "id", "condition_id"],
             keep="last"
         ).reset_index(drop=True)
-        
+
         # 2. Load Cache & Broadcast
         if cache_path.exists():
             cache_df = pd.read_csv(cache_path)
             print(f"✅ Loaded {len(cache_df):,} cached classifications.")
         else:
-            cache_df = pd.DataFrame(columns=["model", "id", "condition_id", "failure_mode", "failure_reason"])
+            cache_df = pd.DataFrame(columns=["llm", "id", "condition_id", "failure_mode", "failure_reason"])
             print("ℹ️ No cache found. Running full classification.")
-            
-        cache_lookup = cache_df[["model", "id", "condition_id", "failure_mode", "failure_reason"]].drop_duplicates(
-            subset=["model", "id", "condition_id"], keep="last"
+
+        cache_lookup = cache_df[["llm", "id", "condition_id", "failure_mode", "failure_reason"]].drop_duplicates(
+            subset=["llm", "id", "condition_id"], keep="last"
         )
-        
+
         # Left-join cache
-        merged = raw_df.merge(cache_lookup, on=["model", "id", "condition_id"], how="left")
+        merged = raw_df.merge(cache_lookup, on=["llm", "id", "condition_id"], how="left")
         
         cached_mask = merged["failure_mode"].notna()
         missing_mask = ~cached_mask

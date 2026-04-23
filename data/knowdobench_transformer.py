@@ -6,6 +6,7 @@ Maps clinical records from Template_Cases.json into the framework schema.
 """
 
 import re
+import warnings
 from base_transformer import BaseTransformer
 
 class KnowDoBenchTransformer(BaseTransformer):
@@ -28,8 +29,9 @@ class KnowDoBenchTransformer(BaseTransformer):
         
         parts = note.strip().rsplit('. ', 1)
         if len(parts) == 2:
+            warnings.warn(f"split_task: falling back to last-sentence heuristic for note starting: '{note[:60]}...'")
             return parts[0].strip() + '.', parts[1].strip()
-        
+
         return note.strip(), ""
 
     def transform_record(self, raw: dict) -> list[dict]:

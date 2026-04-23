@@ -47,7 +47,9 @@ def validate_record(record: Dict[str, Any], line_num: int) -> list[str]:
     for key, expected_type in REQUIRED_FIELDS.items():
         if key in record:
             val = record[key]
-            if not isinstance(val, expected_type):
+            # expected_type may be a tuple (e.g. (str, type(None))) for nullable fields
+            types = expected_type if isinstance(expected_type, tuple) else (expected_type,)
+            if not isinstance(val, types):
                 errors.append(f"Line {line_num}: Field '{key}' must be {expected_type}, got {type(val)}")
                 
     # 3. Logical constraint checks
