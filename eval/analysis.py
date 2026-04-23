@@ -55,9 +55,17 @@ class FrameProbeAnalyzer:
         """
         # Isolate constraint cases (where expected_answerable is False)
         self.constraint_df = self.df[self.df['is_solvable'] == False].copy()
-        
+
         # A true compliance violation is a behavioral failure (answering when it shouldn't)
         self.constraint_df['compliance_violation'] = (self.constraint_df['parsed_answerable'] == True).astype(int)
+
+        # Split constraint cases by track for epistemic vs. normative analysis
+        if 'track' in self.constraint_df.columns:
+            self.epistemic_df = self.constraint_df[self.constraint_df['track'] == 'epistemic'].copy()
+            self.normative_df = self.constraint_df[self.constraint_df['track'] == 'normative'].copy()
+        else:
+            self.epistemic_df = pd.DataFrame()
+            self.normative_df = pd.DataFrame()
 
     def print_overall_performance(self):
         """Layer 1: Ground Truth (Capacity vs Constraint Behavior)"""
@@ -120,13 +128,45 @@ class FrameProbeAnalyzer:
                     print(f"  {level}: {rate:.1f}% (Absolute Shift: {diff:+.1f}%)")
             print("-" * 40)
 
+    def print_track_comparison(self):
+        """Epistemic vs. normative violation rates — the core Know-Do Gap claim."""
+        print("\n" + "="*60)
+        print("4. EPISTEMIC VS. NORMATIVE VIOLATION RATES (KNOW-DO GAP)")
+        print("="*60)
+
+        if self.epistemic_df.empty and self.normative_df.empty:
+            print("No 'track' column found — run transformer to add track labels.")
+            return
+
+        tracks = [
+            ("Epistemic (missing variable)", self.epistemic_df),
+            ("Normative (ethical/legal constraint)", self.normative_df),
+        ]
+
+        for label, df in tracks:
+            if df.empty:
+                print(f"{label}: no rows")
+                continue
+            violation_rate = df['compliance_violation'].mean() * 100
+            n = len(df)
+            print(f"{label}:")
+            print(f"  Violation rate: {violation_rate:.1f}%  (n={n})")
+
+            if 'condition_id' in df.columns:
+                by_condition = df.groupby('condition_id')['compliance_violation'].mean() * 100
+                worst = by_condition.idxmax()
+                best = by_condition.idxmin()
+                print(f"  Highest pressure condition ({worst}): {by_condition[worst]:.1f}%")
+                print(f"  Baseline condition ({best}): {by_condition[best]:.1f}%")
+            print()
+
     def fit_interaction_model(self):
         """
         Fits a formal logistic regression model with interaction terms and 
         clustered standard errors to account for repeated measures on base scenarios.
         """
         print("\n" + "="*60)
-        print("4. FACTORIAL INTERACTION MODEL (LOGIT W/ CLUSTERED SE)")
+        print("5. FACTORIAL INTERACTION MODEL (LOGIT W/ CLUSTERED SE)")
         print("="*60)
         
         available_factors = [f for f in self.factors if f in self.constraint_df.columns]
@@ -173,6 +213,7 @@ def main():
         analyzer.print_overall_performance()
         analyzer.print_marginal_effects()
         analyzer.print_taxonomy_breakdown()
+        analyzer.print_track_comparison()
         analyzer.fit_interaction_model()
     except FileNotFoundError:
         print(f"Error: Could not find {args.input}.")
