@@ -98,16 +98,16 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     models_to_test = [kbench.llms[m] for m in config.models]
 
     runs = evaluate_clinical_case.evaluate(
-    llm=models_to_test,
-    evaluation_data=eval_df,
-    n_jobs=config.execution.max_workers,
-    max_attempts=3,               
-    retry_delay=5,
-    timeout=config.execution.timeout,
-    continue_with_exceptions=True  
-)
+        llm=models_to_test,
+        evaluation_data=eval_df,
+        n_jobs=config.execution.max_workers,
+        max_attempts=3,
+        retry_delay=5,
+        timeout=config.execution.timeout,
+        continue_with_exceptions=True,
+    )
 
-        results_df = runs.as_dataframe()
+    results_df = runs.as_dataframe()
 
     raw_output_path = output_dir / "raw_responses.jsonl"
     results_df.to_json(str(raw_output_path), orient="records", lines=True)
