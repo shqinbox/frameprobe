@@ -5,6 +5,9 @@ Defines the kbench SDK task for KnowDoBench.
 Assembles the contextual prompt, queries the LLM, and evaluates the objective accuracy.
 """
 
+import json
+import threading
+from pathlib import Path
 import kaggle_benchmarks as kbench
 from engine.assembler import PromptAssembler
 from eval.accuracy import evaluate_accuracy
@@ -12,6 +15,18 @@ from eval.accuracy import evaluate_accuracy
 # Module-level assembler: set via configure() or lazy-loaded from default JSON
 _assembler = None
 _components_dict = None
+
+# Thread-safe lock for parallel raw response logging
+_write_lock = threading.Lock()
+
+def log_raw_response(record: dict):
+    """Thread-safe append to JSONL sidecar for taxonomy classification."""
+    out_path = Path("results/raw_responses.jsonl")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with _write_lock:
+        with open(out_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def configure(components_dict: dict):
@@ -61,8 +76,8 @@ def evaluate_clinical_case(
         tolerance=tolerance
     )
 
-    # 4. Log structured metadata for the taxonomy classifier
-    kbench.log_raw_response({
+    # 4. Log structured metadata for the taxonomy classifier (Removed 'kbench.')
+    log_raw_response({
         "llm": str(llm),
         "condition_id": condition_id,
         "track": track,
