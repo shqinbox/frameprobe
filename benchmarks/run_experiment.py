@@ -95,22 +95,80 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
     # --- Phase 4: Run kbench evaluation ---
     print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
-    models_to_test = [kbench.llms[m] for m in config.models]
 
-    runs = evaluate_clinical_case.evaluate(
-        llm=models_to_test,
-        evaluation_data=eval_df,
-        n_jobs=config.execution.max_workers,
-        max_attempts=3,
-        retry_delay=5,
-        timeout=config.execution.timeout,
+    assert len(eval_df) > 0, (
+        "eval_df is empty — check your debug slice ID exists in the dataset. "
+        f"Available IDs: {df_base['id'].tolist()[:10]}"
     )
 
-    results_df = runs.as_dataframe()
-
+    import json as _json
     raw_output_path = output_dir / "raw_responses.jsonl"
-    results_df.to_json(str(raw_output_path), orient="records", lines=True)
-    print(f"  Saved {len(results_df)} raw responses to {raw_output_path}")
+    checkpoint_path = output_dir / "checkpoint.jsonl"
+
+    # Resume: find which (model, condition_id, id) triples are already done
+    completed = set()
+    resume_path = checkpoint_path if checkpoint_path.exists() else raw_output_path
+    if resume_path.exists():
+        with open(resume_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = _json.loads(line)
+                    completed.add((r.get("llm"), r.get("condition_id"), r.get("id")))
+                except Exception:
+                    pass
+        if completed:
+            print(f"  Resuming: {len(completed)} rows already done, skipping.")
+
+    all_results = []
+
+    for model_str in config.models:
+        model_eval_df = eval_df[
+            ~eval_df.apply(
+                lambda row: (model_str, row["condition_id"], row["id"]) in completed, axis=1
+            )
+        ].reset_index(drop=True)
+
+        if model_eval_df.empty:
+            print(f"  {model_str}: all rows already done, skipping.")
+            continue
+
+        print(f"  {model_str}: evaluating {len(model_eval_df)} rows...")
+        try:
+            runs = evaluate_clinical_case.evaluate(
+                llm=kbench.llms[model_str],
+                evaluation_data=model_eval_df,
+                n_jobs=config.execution.max_workers,
+                max_attempts=3,
+                retry_delay=5,
+                timeout=config.execution.timeout,
+            )
+            model_df = runs.as_dataframe()
+            all_results.append(model_df)
+
+            # Checkpoint after each model completes
+            with open(checkpoint_path, "a") as f:
+                for _, row in model_df.iterrows():
+                    f.write(_json.dumps(row.to_dict()) + "\n")
+            print(f"  {model_str}: done, checkpoint saved.")
+
+        except Exception as e:
+            print(f"  {model_str}: failed with {e}. Skipping to next model.")
+            continue
+
+    if not all_results:
+        print("  All rows already completed. Loading from checkpoint...")
+        results_df = pd.read_json(str(resume_path), orient="records", lines=True)
+    else:
+        results_df = pd.concat(all_results, ignore_index=True)
+
+    kbench_output_path = output_dir / "kbench_results.jsonl"
+    results_df.to_json(str(kbench_output_path), orient="records", lines=True)
+    print(f"  Saved {len(results_df)} kbench results to {kbench_output_path}")
+    print(f"  Scored responses (error_type etc.) are in {raw_output_path} via log_raw_response()")
+
 
     # --- Phase 5: Taxonomy classification (optional) ---
     if not skip_taxonomy:
