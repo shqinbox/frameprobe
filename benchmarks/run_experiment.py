@@ -104,7 +104,6 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
         max_attempts=3,
         retry_delay=5,
         timeout=config.execution.timeout,
-        continue_with_exceptions=True,
     )
 
     results_df = runs.as_dataframe()
