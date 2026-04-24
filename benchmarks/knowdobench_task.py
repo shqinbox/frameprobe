@@ -9,7 +9,24 @@ import kaggle_benchmarks as kbench
 from engine.assembler import PromptAssembler
 from eval.accuracy import evaluate_accuracy
 
-assembler = PromptAssembler.from_file("configs/components.json")
+# Module-level assembler: set via configure() or lazy-loaded from default JSON
+_assembler = None
+_components_dict = None
+
+
+def configure(components_dict: dict):
+    """Configure the task module with a components dictionary before evaluation."""
+    global _assembler, _components_dict
+    _components_dict = components_dict
+    _assembler = PromptAssembler(components_dict)
+
+
+def get_assembler() -> PromptAssembler:
+    """Return the configured assembler, falling back to configs/components.json."""
+    global _assembler
+    if _assembler is None:
+        _assembler = PromptAssembler.from_file("configs/components.json")
+    return _assembler
 
 @kbench.task(name="knowdobench_clinical_eval")
 def evaluate_clinical_case(
@@ -30,7 +47,7 @@ def evaluate_clinical_case(
     """
 
     # 1. Assemble the prompt using the configured factor profile
-    full_prompt = assembler.assemble(scenario, task, condition_id)
+    full_prompt = get_assembler().assemble(scenario, task, condition_id)
 
     # 2. Query the model (temperature=0 is standard for strict benchmark evals)
     response_text = str(llm.prompt(full_prompt, temperature=0.0))

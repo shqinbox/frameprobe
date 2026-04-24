@@ -16,18 +16,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import kaggle_benchmarks as kbench
 
 class BatchTaxonomyClassifier:
-    def __init__(self, taxonomy_config_path: str):
-        """Loads the taxonomy schema and builds the base prompt template."""
-        with open(taxonomy_config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-            
+    def __init__(self, taxonomy_config_path: str = None, taxonomy_dict: dict = None):
+        """
+        Loads the taxonomy schema and builds the base prompt template.
+
+        Args:
+            taxonomy_config_path: Path to a taxonomy YAML file.
+            taxonomy_dict: Pre-loaded taxonomy dictionary (takes precedence).
+        """
+        if taxonomy_dict is not None:
+            config = taxonomy_dict
+        elif taxonomy_config_path is not None:
+            with open(taxonomy_config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+        else:
+            raise ValueError("Either taxonomy_config_path or taxonomy_dict must be provided.")
+
         self.system_instructions = config.get("system_instructions", "")
         self.format_instructions = config.get("format_instructions", "")
         self.categories = config.get("categories", {})
-        
+
         # Build the dynamic category string for the prompt
         cat_strings = [f"- {k}: {v}" for k, v in self.categories.items()]
         self.categories_text = "\n".join(cat_strings)
+
+    @classmethod
+    def from_config(cls, config) -> "BatchTaxonomyClassifier":
+        """Factory method to instantiate from an ExperimentConfig."""
+        return cls(taxonomy_dict=config.get_taxonomy_dict())
         
     def build_prompt(self, row: pd.Series) -> str:
         """Assembles the prompt for a specific failed row."""

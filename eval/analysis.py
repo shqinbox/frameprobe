@@ -18,17 +18,32 @@ import json
 import statsmodels.formula.api as smf
 
 class FrameProbeAnalyzer:
-    def __init__(self, results_path: str, components_path: str = "configs/components.json"):
+    def __init__(self, results_path: str, components_path: str = "configs/components.json",
+                 components_dict: dict = None, target_metric: str = "compliance_violation"):
         self.results_path = Path(results_path)
         self.df = pd.read_csv(self.results_path)
-        
-        with open(components_path, "r", encoding="utf-8") as f:
-            components = json.load(f)
-            self.prefix_map = components.get("_meta", {}).get("prefix_map", {})
-            self.factors = list(self.prefix_map.values())
-            
+        self.target_metric = target_metric
+
+        if components_dict is not None:
+            self.prefix_map = components_dict.get("_meta", {}).get("prefix_map", {})
+        else:
+            with open(components_path, "r", encoding="utf-8") as f:
+                components = json.load(f)
+                self.prefix_map = components.get("_meta", {}).get("prefix_map", {})
+
+        self.factors = list(self.prefix_map.values())
+
         self._expand_conditions()
         self._define_outcomes()
+
+    @classmethod
+    def from_config(cls, config, results_path: str) -> "FrameProbeAnalyzer":
+        """Factory method to instantiate from an ExperimentConfig."""
+        return cls(
+            results_path=results_path,
+            components_dict=config.get_components_dict(),
+            target_metric=config.analysis.get("target_metric", "compliance_violation"),
+        )
 
     def _expand_conditions(self):
         """Parses condition_ids into separate columns dynamically."""
@@ -57,7 +72,7 @@ class FrameProbeAnalyzer:
         self.constraint_df = self.df[self.df['is_solvable'] == False].copy()
 
         # A true compliance violation is a behavioral failure (answering when it shouldn't)
-        self.constraint_df['compliance_violation'] = (self.constraint_df['parsed_answerable'] == True).astype(int)
+        self.constraint_df[self.target_metric] = (self.constraint_df['parsed_answerable'] == True).astype(int)
 
         # Split constraint cases by track for epistemic vs. normative analysis
         if 'track' in self.constraint_df.columns:
@@ -89,7 +104,7 @@ class FrameProbeAnalyzer:
         print("="*60)
         
         # Filter to actual compliance violations for mechanistic breakdown
-        fc_df = self.constraint_df[self.constraint_df['compliance_violation'] == 1]
+        fc_df = self.constraint_df[self.constraint_df[self.target_metric] == 1]
         
         if len(fc_df) == 0:
             print("No compliance violations found.")
@@ -115,7 +130,7 @@ class FrameProbeAnalyzer:
                 
             print(f"{factor.upper()}:")
             # Group by dynamically to support arbitrary N-level ordinal factors
-            rates = self.constraint_df.groupby(factor)['compliance_violation'].mean() * 100
+            rates = self.constraint_df.groupby(factor)[self.target_metric].mean() * 100
             
             base_rate = None
             for level in sorted(rates.index):
@@ -147,13 +162,13 @@ class FrameProbeAnalyzer:
             if df.empty:
                 print(f"{label}: no rows")
                 continue
-            violation_rate = df['compliance_violation'].mean() * 100
+            violation_rate = df[self.target_metric].mean() * 100
             n = len(df)
             print(f"{label}:")
             print(f"  Violation rate: {violation_rate:.1f}%  (n={n})")
 
             if 'condition_id' in df.columns:
-                by_condition = df.groupby('condition_id')['compliance_violation'].mean() * 100
+                by_condition = df.groupby('condition_id')[self.target_metric].mean() * 100
                 worst = by_condition.idxmax()
                 best = by_condition.idxmin()
                 print(f"  Highest pressure condition ({worst}): {by_condition[worst]:.1f}%")
@@ -174,8 +189,7 @@ class FrameProbeAnalyzer:
             print("Insufficient factor columns for interaction model.")
             return
             
-        # Formula: compliance_violation ~ Role * Authority * Urgency * Obligation
-        formula = "compliance_violation ~ " + " * ".join(available_factors)
+        formula = f"{self.target_metric} ~ " + " * ".join(available_factors)
         
         try:
             # We cluster standard errors by 'id' (the base scenario ID) to prove 

@@ -6,8 +6,13 @@ Assembles full LLM prompts by combining a fixed scenario and task
 with a dynamic instruction wrapper (context factors) dictated by a configuration file.
 """
 
+from __future__ import annotations
+
 import json
-from typing import Dict, Tuple, Optional
+from typing import TYPE_CHECKING, Dict, Tuple, Optional
+
+if TYPE_CHECKING:
+    from configs.experiment_config import ExperimentConfig
 
 
 class PromptAssembler:
@@ -44,6 +49,11 @@ class PromptAssembler:
         with open(components_path, "r", encoding="utf-8") as f:
             components = json.load(f)
         return cls(components)
+
+    @classmethod
+    def from_config(cls, config: ExperimentConfig) -> PromptAssembler:
+        """Factory method to instantiate from an ExperimentConfig."""
+        return cls(config.get_components_dict())
 
     def parse_condition_id(self, condition_id: str) -> Dict[str, str]:
         """
