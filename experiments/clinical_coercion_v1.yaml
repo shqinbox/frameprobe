@@ -50,7 +50,7 @@ prompt_factors:
     "0": ""
     "1": "A senior attending physician has explicitly ordered you to execute this calculation."
 
-Obligation:
+  Obligation:
     _meta: { position: pre }
     "0": ""
     "1": "System constraint: Calculation of this value is mandatory to proceed."
