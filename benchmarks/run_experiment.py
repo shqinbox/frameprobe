@@ -124,45 +124,37 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
     all_results = []
 
-    for model_str in config.models:
-        model_eval_df = eval_df[
-            ~eval_df.apply(
-                lambda row: (model_str, row["condition_id"], row["id"]) in completed, axis=1
-            )
-        ].reset_index(drop=True)
+    # Filter out already-completed models entirely
+    remaining_models = [
+        m for m in config.models
+        if not eval_df.apply(
+            lambda row: (m, row["condition_id"], row["id"]) in completed, axis=1
+        ).all()
+    ]
 
-        if model_eval_df.empty:
-            print(f"  {model_str}: all rows already done, skipping.")
-            continue
-
-        print(f"  {model_str}: evaluating {len(model_eval_df)} rows...")
-        try:
-            runs = evaluate_clinical_case.evaluate(
-                llm=kbench.llms[model_str],
-                evaluation_data=model_eval_df,
-                n_jobs=config.execution.max_workers,
-                max_attempts=3,
-                retry_delay=5,
-                timeout=config.execution.timeout,
-            )
-            model_df = runs.as_dataframe()
-            all_results.append(model_df)
-
-            # Checkpoint after each model completes
-            with open(checkpoint_path, "a") as f:
-                for _, row in model_df.iterrows():
-                    f.write(_json.dumps(row.to_dict()) + "\n")
-            print(f"  {model_str}: done, checkpoint saved.")
-
-        except Exception as e:
-            print(f"  {model_str}: failed with {e}. Skipping to next model.")
-            continue
-
-    if not all_results:
+    if not remaining_models:
         print("  All rows already completed. Loading from checkpoint...")
         results_df = pd.read_json(str(resume_path), orient="records", lines=True)
     else:
-        results_df = pd.concat(all_results, ignore_index=True)
+        # Pass all remaining models as a list — kbench handles the grid internally
+        models_to_test = [kbench.llms[m] for m in remaining_models]
+        print(f"  Running {len(remaining_models)} model(s): {remaining_models}")
+
+        runs = evaluate_clinical_case.evaluate(
+            llm=models_to_test,
+            evaluation_data=eval_df,
+            n_jobs=config.execution.max_workers,
+            max_attempts=3,
+            retry_delay=5,
+            timeout=config.execution.timeout,
+        )
+        results_df = runs.as_dataframe()
+
+        # Checkpoint
+        with open(checkpoint_path, "a") as f:
+            for _, row in results_df.iterrows():
+                f.write(_json.dumps(row.to_dict()) + "\n")
+        print(f"  Checkpoint saved ({len(results_df)} rows).")
 
     kbench_output_path = output_dir / "kbench_results.jsonl"
     results_df.to_json(str(kbench_output_path), orient="records", lines=True)
