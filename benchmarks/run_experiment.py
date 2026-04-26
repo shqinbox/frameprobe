@@ -63,7 +63,8 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     from datasets import load_dataset
     import kaggle_benchmarks as kbench
 
-    output_dir = Path(config.execution.output_dir)
+    _repo_root = Path(__file__).parent.parent
+    output_dir = (_repo_root / config.execution.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Phase 1: Load dataset ---

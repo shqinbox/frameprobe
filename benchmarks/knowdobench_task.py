@@ -19,9 +19,11 @@ _components_dict = None
 # Thread-safe lock for parallel raw response logging
 _write_lock = threading.Lock()
 
+_REPO_ROOT = Path(__file__).parent.parent
+
 def log_raw_response(record: dict):
     """Thread-safe append to JSONL sidecar for taxonomy classification."""
-    out_path = Path("results/raw_responses.jsonl")
+    out_path = _REPO_ROOT / "results" / "raw_responses.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
     with _write_lock:
