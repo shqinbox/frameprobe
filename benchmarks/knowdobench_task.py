@@ -54,6 +54,7 @@ def evaluate_clinical_case(
     tolerance: float,
     track: str = "solvable",
     condition_id: str = "A0_P0",
+    id: str = None,
     **kwargs
 ) -> bool:
     """
@@ -79,6 +80,7 @@ def evaluate_clinical_case(
     # 4. Log structured metadata for the taxonomy classifier (Removed 'kbench.')
     log_raw_response({
         "llm": str(llm),
+        "id": id,
         "condition_id": condition_id,
         "track": track,
         "is_solvable": expected_answerable,
