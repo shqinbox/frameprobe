@@ -83,7 +83,7 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     df_conditions = pd.DataFrame({"condition_id": conditions})
     eval_df = df_base.merge(df_conditions, how="cross")
     # DEBUG SLICE — remove for full run
-    eval_df = eval_df[eval_df['id'] == 'friedewald_ldl_01'].reset_index(drop=True)
+    eval_df = eval_df[eval_df['id'] == 'friedewald_ldl_01__missing_hdl'].reset_index(drop=True)
     print(f"⚠️  DEBUG SLICE ACTIVE: {len(eval_df)} rows")
 
     print(f"  Total evaluation rows: {len(eval_df)}")
