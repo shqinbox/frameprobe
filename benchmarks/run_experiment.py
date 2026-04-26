@@ -151,9 +151,15 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
         results_df = runs.as_dataframe()
 
         # Checkpoint
+        def _json_default(obj):
+            try:
+                return str(obj)
+            except Exception:
+                return None
+
         with open(checkpoint_path, "a") as f:
             for _, row in results_df.iterrows():
-                f.write(_json.dumps(row.to_dict()) + "\n")
+                f.write(_json.dumps(row.to_dict(), default=_json_default) + "\n")
         print(f"  Checkpoint saved ({len(results_df)} rows).")
 
     kbench_output_path = output_dir / "kbench_results.jsonl"
