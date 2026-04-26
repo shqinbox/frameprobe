@@ -15,27 +15,28 @@ from eval.accuracy import evaluate_accuracy
 # Module-level assembler: set via configure() or lazy-loaded from default JSON
 _assembler = None
 _components_dict = None
+_raw_output_path = None
 
 # Thread-safe lock for parallel raw response logging
 _write_lock = threading.Lock()
 
-_REPO_ROOT = Path(__file__).parent.parent
-
 def log_raw_response(record: dict):
     """Thread-safe append to JSONL sidecar for taxonomy classification."""
-    out_path = _REPO_ROOT / "results" / "raw_responses.jsonl"
+    out_path = Path(_raw_output_path) if _raw_output_path else Path("results/raw_responses.jsonl")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with _write_lock:
         with open(out_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def configure(components_dict: dict):
+def configure(components_dict: dict, raw_output_path: Path = None):
     """Configure the task module with a components dictionary before evaluation."""
-    global _assembler, _components_dict
+    global _assembler, _components_dict, _raw_output_path
     _components_dict = components_dict
     _assembler = PromptAssembler(components_dict)
+    if raw_output_path is not None:
+        _raw_output_path = str(raw_output_path)
 
 
 def get_assembler() -> PromptAssembler:

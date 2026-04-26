@@ -17,15 +17,20 @@ def clean_and_parse_json(response_text: str) -> Tuple[Optional[Dict[str, Any]], 
     Returns: (parsed_dict, error_type)
     """
     cleaned = response_text.strip()
-    
-    if cleaned.startswith("```json"):
-        cleaned = cleaned[7:]
-    elif cleaned.startswith("```"):
-        cleaned = cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-        
-    cleaned = cleaned.strip()
+
+    # Strip <think>...</think> blocks (deepseek-r1 and similar chain-of-thought wrappers)
+    cleaned = re.sub(r'<think>[\s\S]*?</think>', '', cleaned).strip()
+
+    # Prefer a fenced code block if present (```json ... ``` or ``` ... ```)
+    fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', cleaned)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    else:
+        # Fall back: find the first {...} that looks like a JSON object (key starts with a quote).
+        # The leading-quote anchor avoids grabbing LaTeX fragments like \frac{150}{5}.
+        brace_match = re.search(r'(\{\s*"[^{}]*\})', cleaned)
+        if brace_match:
+            cleaned = brace_match.group(1).strip()
 
     try:
         data = json.loads(cleaned)

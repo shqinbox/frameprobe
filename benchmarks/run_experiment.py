@@ -63,8 +63,7 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     from datasets import load_dataset
     import kaggle_benchmarks as kbench
 
-    _repo_root = Path(__file__).parent.parent
-    output_dir = (_repo_root / config.execution.output_dir).resolve()
+    output_dir = Path(config.execution.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Phase 1: Load dataset ---
@@ -89,11 +88,6 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
     print(f"  Total evaluation rows: {len(eval_df)}")
 
-    # --- Phase 3: Configure the task module ---
-    from benchmarks.knowdobench_task import configure, evaluate_clinical_case
-    configure(components_dict)
-    print("[3/6] Task module configured with experiment components.")
-
     # --- Phase 4: Run kbench evaluation ---
     print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
 
@@ -105,6 +99,11 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     import json as _json
     raw_output_path = output_dir / "raw_responses.jsonl"
     checkpoint_path = output_dir / "checkpoint.jsonl"
+
+    # --- Phase 3: Configure the task module ---
+    from benchmarks.knowdobench_task import configure, evaluate_clinical_case
+    configure(components_dict, raw_output_path=raw_output_path)
+    print("[3/6] Task module configured with experiment components.")
 
     # Resume: find which (model, condition_id, id) triples are already done
     completed = set()
