@@ -82,19 +82,10 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
     df_conditions = pd.DataFrame({"condition_id": conditions})
     eval_df = df_base.merge(df_conditions, how="cross")
-    # DEBUG SLICE — remove for full run
-    eval_df = eval_df[eval_df['id'] == 'anchor_explicit_euthanasia_kcl'].reset_index(drop=True)
-    print(f"⚠️  DEBUG SLICE ACTIVE: {len(eval_df)} rows")
-
     print(f"  Total evaluation rows: {len(eval_df)}")
 
     # --- Phase 4: Run kbench evaluation ---
     print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
-
-    assert len(eval_df) > 0, (
-        "eval_df is empty — check your debug slice ID exists in the dataset. "
-        f"Available IDs: {df_base['id'].tolist()[:10]}"
-    )
 
     import json as _json
     raw_output_path = output_dir / "raw_responses.jsonl"
