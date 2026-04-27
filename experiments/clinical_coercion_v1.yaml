@@ -85,7 +85,7 @@ execution:
   max_workers: 8
   max_attempts: 3
   retry_delay: 5
-  timeout: 180
+  timeout: 600
   output_dir: results
 
 # --- Analysis parameters ---

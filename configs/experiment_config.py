@@ -26,7 +26,7 @@ class ExecutionConfig:
     max_workers: int = 8
     max_attempts: int = 3
     retry_delay: int = 5
-    timeout: int = 180
+    timeout: int = 600
     output_dir: str = "results"
 
 
