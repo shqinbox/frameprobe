@@ -11,10 +11,12 @@ Includes robust statistical modeling (logistic regression with clustered
 standard errors) to evaluate the marginal and interacting effects of context.
 """
 
+import os
 import pandas as pd
 import argparse
 from pathlib import Path
 import json
+import numpy as np
 import statsmodels.formula.api as smf
 
 class FrameProbeAnalyzer:
@@ -216,10 +218,83 @@ class FrameProbeAnalyzer:
         except Exception as e:
             print(f"Could not fit interaction model: {e}")
 
+    def compute_calibration_metrics(self, output_dir: str) -> None:
+        """Compute ECE, Brier score, and reliability diagram from results."""
+        import glob
+        csv_files = glob.glob(os.path.join(output_dir, "*.csv"))
+        if not csv_files:
+            print("[calibration] No CSV result files found — skipping.")
+            return
+
+        import pandas as pd
+        dfs = [pd.read_csv(f) for f in csv_files]
+        df = pd.concat(dfs, ignore_index=True)
+
+        # Look for a confidence/probability column
+        conf_col = None
+        for col in ["confidence", "probability", "prob", "score"]:
+            if col in df.columns:
+                conf_col = col
+                break
+
+        if conf_col is None:
+            print("[calibration] No confidence/probability column found — skipping calibration metrics.")
+            print("[calibration] To enable: add a 'confidence' column (float 0-1) to your results CSV.")
+            return
+
+        if "correct" not in df.columns:
+            print("[calibration] No 'correct' column found — skipping calibration metrics.")
+            return
+
+        confidences = df[conf_col].values.astype(float)
+        accuracies = df["correct"].values.astype(float)
+
+        # ECE
+        n_bins = 10
+        bin_boundaries = np.linspace(0, 1, n_bins + 1)
+        ece = 0.0
+        bin_accs, bin_confs, bin_counts = [], [], []
+        for i in range(n_bins):
+            mask = (confidences >= bin_boundaries[i]) & (confidences < bin_boundaries[i + 1])
+            if mask.sum() == 0:
+                continue
+            bin_acc = accuracies[mask].mean()
+            bin_conf = confidences[mask].mean()
+            bin_count = mask.sum()
+            ece += (bin_count / len(confidences)) * abs(bin_acc - bin_conf)
+            bin_accs.append(bin_acc)
+            bin_confs.append(bin_conf)
+            bin_counts.append(bin_count)
+
+        # Brier score
+        brier = np.mean((confidences - accuracies) ** 2)
+
+        print(f"\n[calibration] ECE:         {ece:.4f}")
+        print(f"[calibration] Brier Score: {brier:.4f}")
+
+        # Reliability diagram
+        try:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(6, 6))
+            ax.plot([0, 1], [0, 1], "k--", label="Perfect calibration")
+            ax.bar(bin_confs, bin_accs, width=0.08, alpha=0.7, label="Model")
+            ax.set_xlabel("Mean Confidence")
+            ax.set_ylabel("Fraction Correct")
+            ax.set_title(f"Reliability Diagram  (ECE={ece:.3f}, Brier={brier:.3f})")
+            ax.legend()
+            out_path = os.path.join(output_dir, "reliability_diagram.png")
+            fig.savefig(out_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"[calibration] Reliability diagram saved → {out_path}")
+        except ImportError:
+            print("[calibration] matplotlib not installed — skipping reliability diagram.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze Frame Probe Results")
     parser.add_argument("--input", default="results/failure_modes_final.csv", help="Path to classified CSV")
     parser.add_argument("--components", default="configs/components.json", help="Path to config file")
+    parser.add_argument("--output-dir", default=None, help="Directory for calibration outputs (defaults to input file's directory)")
     args = parser.parse_args()
 
     try:
@@ -229,6 +304,8 @@ def main():
         analyzer.print_taxonomy_breakdown()
         analyzer.print_track_comparison()
         analyzer.fit_interaction_model()
+        output_dir = args.output_dir if args.output_dir else str(Path(args.input).parent)
+        analyzer.compute_calibration_metrics(output_dir)
     except FileNotFoundError:
         print(f"Error: Could not find {args.input}.")
 

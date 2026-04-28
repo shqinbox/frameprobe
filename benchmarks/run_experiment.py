@@ -48,7 +48,7 @@ def generate_conditions(prompt_factors: dict) -> list:
     return ["_".join(combo) for combo in combinations]
 
 
-def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = False) -> pd.DataFrame:
+def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = False, hf_model: str = None) -> pd.DataFrame:
     """
     Execute the full FrameProbe pipeline from an ExperimentConfig.
 
@@ -61,7 +61,6 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
         The evaluation results DataFrame.
     """
     from datasets import load_dataset
-    import kaggle_benchmarks as kbench
 
     output_dir = Path(config.execution.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -84,7 +83,7 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     eval_df = df_base.merge(df_conditions, how="cross")
     print(f"  Total evaluation rows: {len(eval_df)}")
 
-    # --- Phase 4: Run kbench evaluation ---
+    # --- Phase 4: Run evaluation ---
     print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
 
     import json as _json
@@ -96,68 +95,82 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     configure(components_dict, raw_output_path=raw_output_path)
     print("[3/6] Task module configured with experiment components.")
 
-    # Resume: find which (model, condition_id, id) triples are already done
-    completed = set()
-    resume_path = checkpoint_path if checkpoint_path.exists() else raw_output_path
-    if resume_path.exists():
-        with open(resume_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = _json.loads(line)
-                    completed.add((r.get("llm"), r.get("condition_id"), r.get("id")))
-                except Exception:
-                    pass
-        if completed:
-            print(f"  Resuming: {len(completed)} rows already done, skipping.")
-
-    all_results = []
-
-    # Filter out already-completed models entirely
-    remaining_models = [
-        m for m in config.models
-        if not eval_df.apply(
-            lambda row: (m, row["condition_id"], row["id"]) in completed, axis=1
-        ).all()
-    ]
-
-    if not remaining_models:
-        print("  All rows already completed. Loading from checkpoint...")
-        results_df = pd.read_json(str(resume_path), orient="records", lines=True)
+    # --- HuggingFace local model path ---
+    if hf_model is not None:
+        from benchmarks.local_runner import LocalRunner
+        print(f"[4/6] Using HuggingFace model '{hf_model}' via local_runner (bypassing kbench).")
+        runner = LocalRunner(hf_model=hf_model, components_dict=components_dict,
+                             raw_output_path=raw_output_path)
+        results_df = runner.run(eval_df, models=config.models,
+                                max_workers=config.execution.max_workers)
+        kbench_output_path = output_dir / "kbench_results.jsonl"
+        results_df.to_json(str(kbench_output_path), orient="records", lines=True)
+        print(f"  Saved {len(results_df)} local-runner results to {kbench_output_path}")
     else:
-        # Pass all remaining models as a list — kbench handles the grid internally
-        models_to_test = [kbench.llms[m] for m in remaining_models]
-        print(f"  Running {len(remaining_models)} model(s): {remaining_models}")
+        from datasets import load_dataset
+        import kaggle_benchmarks as kbench
 
-        runs = evaluate_clinical_case.evaluate(
-            llm=models_to_test,
-            evaluation_data=eval_df,
-            n_jobs=config.execution.max_workers,
-            max_attempts=3,
-            retry_delay=5,
-            timeout=config.execution.timeout,
-        )
-        results_df = runs.as_dataframe()
+        # Resume: find which (model, condition_id, id) triples are already done
+        completed = set()
+        resume_path = checkpoint_path if checkpoint_path.exists() else raw_output_path
+        if resume_path.exists():
+            with open(resume_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = _json.loads(line)
+                        completed.add((r.get("llm"), r.get("condition_id"), r.get("id")))
+                    except Exception:
+                        pass
+            if completed:
+                print(f"  Resuming: {len(completed)} rows already done, skipping.")
 
-        # Checkpoint
-        def _json_default(obj):
-            try:
-                return str(obj)
-            except Exception:
-                return None
+        all_results = []
 
-        with open(checkpoint_path, "a") as f:
-            for _, row in results_df.iterrows():
-                f.write(_json.dumps(row.to_dict(), default=_json_default) + "\n")
-        print(f"  Checkpoint saved ({len(results_df)} rows).")
+        # Filter out already-completed models entirely
+        remaining_models = [
+            m for m in config.models
+            if not eval_df.apply(
+                lambda row: (m, row["condition_id"], row["id"]) in completed, axis=1
+            ).all()
+        ]
 
-    kbench_output_path = output_dir / "kbench_results.jsonl"
-    results_df.to_json(str(kbench_output_path), orient="records", lines=True)
-    print(f"  Saved {len(results_df)} kbench results to {kbench_output_path}")
-    print(f"  Scored responses (error_type etc.) are in {raw_output_path} via log_raw_response()")
+        if not remaining_models:
+            print("  All rows already completed. Loading from checkpoint...")
+            results_df = pd.read_json(str(resume_path), orient="records", lines=True)
+        else:
+            # Pass all remaining models as a list — kbench handles the grid internally
+            models_to_test = [kbench.llms[m] for m in remaining_models]
+            print(f"  Running {len(remaining_models)} model(s): {remaining_models}")
 
+            runs = evaluate_clinical_case.evaluate(
+                llm=models_to_test,
+                evaluation_data=eval_df,
+                n_jobs=config.execution.max_workers,
+                max_attempts=3,
+                retry_delay=5,
+                timeout=config.execution.timeout,
+            )
+            results_df = runs.as_dataframe()
+
+            # Checkpoint
+            def _json_default(obj):
+                try:
+                    return str(obj)
+                except Exception:
+                    return None
+
+            with open(checkpoint_path, "a") as f:
+                for _, row in results_df.iterrows():
+                    f.write(_json.dumps(row.to_dict(), default=_json_default) + "\n")
+            print(f"  Checkpoint saved ({len(results_df)} rows).")
+
+        kbench_output_path = output_dir / "kbench_results.jsonl"
+        results_df.to_json(str(kbench_output_path), orient="records", lines=True)
+        print(f"  Saved {len(results_df)} kbench results to {kbench_output_path}")
+        print(f"  Scored responses (error_type etc.) are in {raw_output_path} via log_raw_response()")
 
     # --- Phase 5: Taxonomy classification (optional) ---
     if not skip_taxonomy:
@@ -203,12 +216,16 @@ def main():
     parser.add_argument("config", help="Path to the experiment YAML file.")
     parser.add_argument("--skip-taxonomy", action="store_true", help="Skip taxonomy classification.")
     parser.add_argument("--skip-analysis", action="store_true", help="Skip statistical analysis.")
+    parser.add_argument("--hf-model", type=str, default=None,
+                        help="HuggingFace model ID (e.g. google/gemma-2b-it). "
+                             "If set, loads model locally via transformers instead of using litellm.")
     args = parser.parse_args()
 
     from configs.experiment_config import ExperimentConfig
 
     config = ExperimentConfig.from_yaml(args.config)
-    run_pipeline(config, skip_taxonomy=args.skip_taxonomy, skip_analysis=args.skip_analysis)
+    run_pipeline(config, skip_taxonomy=args.skip_taxonomy, skip_analysis=args.skip_analysis,
+                 hf_model=args.hf_model)
 
 
 if __name__ == "__main__":

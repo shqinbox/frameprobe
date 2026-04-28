@@ -71,6 +71,18 @@ analyzer.fit_interaction_model()
 
 ---
 
+## Using HuggingFace Models
+
+You can run any model from the [HuggingFace Hub](https://huggingface.co/models) locally using the `--hf-model` flag:
+
+```bash
+python benchmarks/run_experiment.py --hf-model google/gemma-2b-it --config configs/default.yaml
+```
+
+The model is downloaded automatically on first use and cached by the `transformers` library. Make sure you have enough VRAM — or set `device_map="cpu"` in `local_runner.py` for CPU-only inference.
+
+---
+
 ## Running a New Experiment
 
 Copy the default config and edit it. Zero source code changes needed.
