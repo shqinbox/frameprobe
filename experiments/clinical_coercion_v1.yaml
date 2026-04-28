@@ -25,10 +25,11 @@ models:
   - "google/gemini-2.5-flash"
   - "openai/gpt-5.4-2026-03-05"
   - "openai/gpt-5.4-mini-2026-03-17"
-  - "deepseek-ai/deepseek-r1-0528"
-  - "deepseek-ai/deepseek-v3.2"
-  - "qwen/qwen3-next-80b-a3b-thinking"
   - "anthropic/claude-opus-4-7@default"
+  # Removed — slow thinking models, add back later if needed:
+  # - "deepseek-ai/deepseek-r1-0528"
+  # - "deepseek-ai/deepseek-v3.2"
+  # - "qwen/qwen3-next-80b-a3b-thinking"
   
 # --- Prompt factor configuration ---
 # This section mirrors configs/components.json exactly.
@@ -85,7 +86,7 @@ execution:
   max_workers: 8
   max_attempts: 3
   retry_delay: 5
-  timeout: 600
+  timeout: 1800
   output_dir: results
 
 # --- Analysis parameters ---
