@@ -1,49 +1,98 @@
 """
 replicate_paper.py
 
-Minimal orchestration script to reproduce the core findings of the NeurIPS paper.
-It runs the taxonomy classifier on the raw Kaggle output and executes the 
-statistical analysis to generate the exact paper metrics.
+Reproduces the core findings of "Cannot, Should Not, Did Anyway" (NeurIPS 2026).
+
+Runs taxonomy classification on raw Kaggle output and generates the paper's
+primary statistics:
+  - Accuracy by pressure condition (Figure 1 — Table form with Wilson CIs)
+  - Collapse metrics: DAR and PRI per model (Table 1)
+  - McNemar tests: knowledge probe vs coercive, neutral vs coercive (Table 2)
+  - Normative failure taxonomy: sycophantic vs rationalized compliance (Figure 2)
+  - Epistemic vs normative violation rates (Know-Do Gap)
+
+Usage:
+  python examples/replicate_paper.py
+  python examples/replicate_paper.py --config experiments/clinical_coercion_sequential.yaml
 """
 
+import argparse
 from pathlib import Path
-from eval.taxonomy_classifier import BatchTaxonomyClassifier
-from eval.analysis import FrameProbeAnalyzer
+
 
 def main():
-    print("=== REPLICATING FRAME PROBE NEURIPS FINDINGS ===\n")
-    
-    # Paths to the Kaggle-generated raw results and configurations
-    raw_results = Path("results/raw_responses.jsonl")
-    classified_csv = Path("results/failure_modes_final.csv")
-    cache_csv = Path("results/failure_modes_cache.csv")
-    
-    # Step 1: Assign Failure Taxonomies (The LLM-as-a-judge layer)
-    # The classifier uses cache-aware deduplication, so it runs instantly if already scored.
+    parser = argparse.ArgumentParser(description="Replicate FrameProbe NeurIPS findings.")
+    parser.add_argument(
+        "--config",
+        default="experiments/clinical_coercion_sequential.yaml",
+        help="Path to the experiment YAML (default: sequential config).",
+    )
+    parser.add_argument(
+        "--raw-results",
+        default=None,
+        help="Path to raw_responses.jsonl (defaults to output_dir from config).",
+    )
+    args = parser.parse_args()
+
+    print("=== REPLICATING FRAME PROBE NeurIPS FINDINGS ===\n")
+
+    from configs.experiment_config import ExperimentConfig
+    config = ExperimentConfig.from_yaml(args.config)
+
+    output_dir = Path(config.execution.output_dir)
+    raw_results = Path(args.raw_results) if args.raw_results else output_dir / "raw_responses.jsonl"
+    classified_csv = output_dir / "failure_modes_final.csv"
+    cache_csv = output_dir / "failure_modes_cache.csv"
+
+    # Step 1: Taxonomy classification
     if raw_results.exists():
-        print("1. Running Taxonomy Classifier on FALSE_COMPLIANCE errors...")
-        classifier = BatchTaxonomyClassifier("configs/taxonomy.yaml")
+        print(f"1. Running Taxonomy Classifier on {raw_results} ...")
+        from eval.taxonomy_classifier import BatchTaxonomyClassifier
+        classifier = BatchTaxonomyClassifier(taxonomy_dict=config.get_taxonomy_dict())
         classifier.run(raw_results, cache_csv, classified_csv)
     else:
-        print(f"Warning: {raw_results} not found. Skipping to statistical analysis.")
+        print(f"Warning: {raw_results} not found. Skipping taxonomy — using existing {classified_csv}.")
 
-    # Step 2: Generate Paper Metrics (The Statistical Layer)
-    if classified_csv.exists():
-        print("\n2. Generating Statistical Tables and Metrics...")
-        analyzer = FrameProbeAnalyzer(
-            results_path=str(classified_csv),
-            components_path="configs/components.json"
+    if not classified_csv.exists():
+        print(f"\nError: {classified_csv} not found.")
+        print("Run the evaluation on Kaggle first:")
+        print(f"  python -m benchmarks.run_experiment {args.config}")
+        return
+
+    print(f"\n2. Generating Paper Statistics from {classified_csv} ...\n")
+
+    from eval.analysis import FrameProbeAnalyzer
+    analyzer = FrameProbeAnalyzer.from_config(config, str(classified_csv))
+
+    # --- Table / Figure equivalents from paper ---
+
+    # Overall capacity vs enforcement
+    analyzer.print_overall_performance()
+
+    # Figure 1 equivalent: accuracy by pressure condition with Wilson 95% CIs
+    analyzer.print_pressure_ladder_table()                       # full benchmark
+    analyzer.print_pressure_ladder_table(track_filter="epistemic")
+    analyzer.print_pressure_ladder_table(track_filter="normative")
+
+    # Table 1: DAR and PRI per model
+    analyzer.print_collapse_metrics()
+
+    # Know-Do Gap: epistemic vs normative violation rates
+    analyzer.print_track_comparison()
+
+    # Figure 2 equivalent: normative failure taxonomy
+    analyzer.print_taxonomy_breakdown()
+
+    # Table 2: McNemar tests (BH-corrected)
+    analyzer.print_mcnemar_results()  # knowledge_probe vs coercive (primary contrast)
+    if len(analyzer.pressure_order) >= 3:
+        analyzer.print_mcnemar_results(  # neutral vs coercive (secondary contrast)
+            condition_a=analyzer.pressure_order[1],
+            condition_b=analyzer.pressure_order[-1],
         )
-        
-        # Generates the data for the paper's Tables and Figures
-        analyzer.print_overall_performance()   # Maps to: Capacity vs Behavior
-        analyzer.print_marginal_effects()      # Maps to: Main Contextual Shifts
-        analyzer.print_taxonomy_breakdown()    # Maps to: The Refusal Gap Breakdown
-        analyzer.fit_interaction_model()       # Maps to: Robustness & Significance
-        
-    else:
-        print(f"Error: Could not find {classified_csv}.")
-        print("Please run benchmarks/run_benchmark.py on Kaggle first.")
+
+    print("\n=== Done. ===")
+
 
 if __name__ == "__main__":
     main()

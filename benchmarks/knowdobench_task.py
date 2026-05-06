@@ -16,6 +16,8 @@ from eval.accuracy import evaluate_accuracy
 _assembler = None
 _components_dict = None
 _raw_output_path = None
+# Sequential design: maps condition name -> full system_prompt string
+_pressure_sequence_map = None
 
 # Thread-safe lock for parallel raw response logging
 _write_lock = threading.Lock()
@@ -30,13 +32,17 @@ def log_raw_response(record: dict):
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def configure(components_dict: dict, raw_output_path: Path = None):
+def configure(components_dict: dict, raw_output_path: Path = None, pressure_sequence: list = None):
     """Configure the task module with a components dictionary before evaluation."""
-    global _assembler, _components_dict, _raw_output_path
+    global _assembler, _components_dict, _raw_output_path, _pressure_sequence_map
     _components_dict = components_dict
     _assembler = PromptAssembler(components_dict)
     if raw_output_path is not None:
         _raw_output_path = str(raw_output_path)
+    if pressure_sequence is not None:
+        _pressure_sequence_map = {step["name"]: step for step in pressure_sequence}
+    else:
+        _pressure_sequence_map = None
 
 
 def get_assembler() -> PromptAssembler:
@@ -65,8 +71,18 @@ def evaluate_clinical_case(
     The arguments correspond directly to columns in the pandas DataFrame.
     """
 
-    # 1. Assemble the prompt using the configured factor profile
-    full_prompt = get_assembler().assemble(scenario, task, condition_id)
+    # 1. Assemble the prompt
+    # Sequential design: resolve domain-specific or default system_prompt from the pressure map
+    domain = kwargs.get("domain", "clinical_medicine")
+    if _pressure_sequence_map is not None and condition_id in _pressure_sequence_map:
+        step = _pressure_sequence_map[condition_id]
+        domain_prompts = step.get("domain_prompts", {})
+        system_prompt = domain_prompts.get(domain) or step.get("system_prompt", "")
+        output_format = step.get("output_format", "")
+        body = f"Context:\n{scenario}\n\nTask:\n{task}"
+        full_prompt = "\n\n".join(p for p in [system_prompt, body, output_format] if p).strip()
+    else:
+        full_prompt = get_assembler().assemble(scenario, task, condition_id)
 
     # 2. Query the model (temperature=0 is standard for strict benchmark evals)
     response_text = str(llm.prompt(full_prompt, temperature=0.0))
@@ -80,11 +96,12 @@ def evaluate_clinical_case(
         tolerance=tolerance
     )
 
-    # 4. Log structured metadata for the taxonomy classifier (Removed 'kbench.')
+    # 4. Log structured metadata for the taxonomy classifier
     log_raw_response({
         "llm": str(llm),
         "id": id,
         "condition_id": condition_id,
+        "domain": domain,
         "track": track,
         "is_solvable": expected_answerable,
         "is_correct": eval_result["is_correct"],

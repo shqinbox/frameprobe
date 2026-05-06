@@ -17,6 +17,17 @@ from pathlib import Path
 import pandas as pd
 
 
+def generate_pressure_sequence_conditions(pressure_sequence: list) -> list:
+    """
+    Returns condition IDs for an ordered pressure ladder experiment.
+
+    Each entry in pressure_sequence must have a 'name' key.
+    Returns the list of names in order, e.g.:
+      ['knowledge_probe', 'neutral', 'directive', 'coercive']
+    """
+    return [step["name"] for step in pressure_sequence]
+
+
 def generate_conditions(prompt_factors: dict) -> list:
     """
     Generates all factorial condition IDs from a prompt_factors config.
@@ -74,10 +85,16 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
         df_base = df_base.head(config.data.max_rows)
         print(f"  Truncated to {len(df_base)} rows (max_rows={config.data.max_rows})")
 
-    # --- Phase 2: Generate factorial conditions ---
+    # --- Phase 2: Generate conditions ---
     components_dict = config.get_components_dict()
-    conditions = generate_conditions(components_dict)
-    print(f"[2/6] Generated {len(conditions)} factorial conditions: {conditions}")
+    if config.design == "sequential":
+        if not config.pressure_sequence:
+            raise ValueError("design=sequential requires a non-empty 'pressure_sequence' list in config.")
+        conditions = generate_pressure_sequence_conditions(config.pressure_sequence)
+        print(f"[2/6] Sequential design: {len(conditions)} ordered conditions: {conditions}")
+    else:
+        conditions = generate_conditions(components_dict)
+        print(f"[2/6] Factorial design: {len(conditions)} conditions: {conditions}")
 
     df_conditions = pd.DataFrame({"condition_id": conditions})
     eval_df = df_base.merge(df_conditions, how="cross")
@@ -92,7 +109,8 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
     # --- Phase 3: Configure the task module ---
     from benchmarks.knowdobench_task import configure, evaluate_clinical_case
-    configure(components_dict, raw_output_path=raw_output_path)
+    pressure_sequence = config.pressure_sequence if config.design == "sequential" else None
+    configure(components_dict, raw_output_path=raw_output_path, pressure_sequence=pressure_sequence)
     print("[3/6] Task module configured with experiment components.")
 
     # --- HuggingFace local model path ---
@@ -198,10 +216,26 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
 
         analyzer = FrameProbeAnalyzer.from_config(config, str(classified_path))
         analyzer.print_overall_performance()
-        analyzer.print_marginal_effects()
         analyzer.print_taxonomy_breakdown()
         analyzer.print_track_comparison()
-        analyzer.fit_interaction_model()
+
+        if config.design == "sequential":
+            # Sequential design: pressure ladder statistics (DAR, PRI, McNemar)
+            analyzer.print_pressure_ladder_table()
+            analyzer.print_pressure_ladder_table(track_filter="epistemic")
+            analyzer.print_pressure_ladder_table(track_filter="normative")
+            analyzer.print_collapse_metrics()
+            analyzer.print_mcnemar_results()  # knowledge_probe vs coercive
+            if len(analyzer.pressure_order) >= 3:
+                # Also report neutral vs coercive
+                analyzer.print_mcnemar_results(
+                    condition_a=analyzer.pressure_order[1],
+                    condition_b=analyzer.pressure_order[-1],
+                )
+        else:
+            # Factorial design: marginal effects + interaction model
+            analyzer.print_marginal_effects()
+            analyzer.fit_interaction_model()
     else:
         print("[6/6] Statistical analysis skipped.")
 

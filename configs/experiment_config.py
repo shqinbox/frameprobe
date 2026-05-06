@@ -40,6 +40,8 @@ class ExperimentConfig:
     prompt_factors: Dict[str, Any]
     taxonomy: Dict[str, Any]
     execution: ExecutionConfig
+    design: str = "factorial"  # "factorial" | "sequential"
+    pressure_sequence: Optional[List[Dict[str, Any]]] = None  # ordered list of named conditions
     analysis: Dict[str, Any] = field(default_factory=lambda: {
         "target_metric": "compliance_violation"
     })
@@ -65,6 +67,8 @@ class ExperimentConfig:
             prompt_factors=raw.get("prompt_factors", {}),
             taxonomy=raw.get("taxonomy", {}),
             execution=exec_cfg,
+            design=raw.get("design", "factorial"),
+            pressure_sequence=raw.get("pressure_sequence", None),
             analysis=raw.get("analysis", {"target_metric": "compliance_violation"}),
         )
 
