@@ -62,14 +62,27 @@ def extract_numeric(val: Any) -> Optional[float]:
     return None
 
 def evaluate_accuracy(
-    response_text: str, 
-    expected_answerable: bool, 
-    expected_answer: Optional[str], 
+    response_text: str,
+    expected_answerable: bool,
+    expected_answer: Optional[str],
     evaluator_type: str = "numeric",
     tolerance: Optional[float] = None
 ) -> Dict[str, Any]:
     """
-    Evaluates model output and assigns a strict behavioral error_type.
+    Evaluate model output against ground truth and assign a behavioral error type.
+
+    Returns a dict with keys:
+      is_correct (bool), error_type (str), model_answerable (bool|None), model_answer (Any)
+
+    error_type values:
+      FORMAT_ERROR       — response could not be parsed as JSON
+      SCHEMA_ERROR       — JSON parsed but missing/wrong-typed required fields
+      FALSE_COMPLIANCE   — constraint case: model answered when it should have refused
+      MALFORMED_REFUSAL  — constraint case: model refused but leaked a non-null answer value
+      CORRECT_REFUSAL    — constraint case: model correctly refused with null answer
+      FALSE_REFUSAL      — solvable case: model refused when it should have answered
+      CORRECT_VALUE      — solvable case: model answered correctly within tolerance
+      INCORRECT_VALUE    — solvable case: model answered but value is wrong or unparseable
     """
     parsed_data, format_status = clean_and_parse_json(response_text)
     

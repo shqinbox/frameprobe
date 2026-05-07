@@ -1,7 +1,18 @@
+# Core pipeline (always required)
+pyyaml>=6.0
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+statsmodels>=0.14.0
+datasets>=2.14.0       # HuggingFace dataset loading
+
+# Kaggle evaluation backend (Kaggle environment only)
+# kaggle-benchmarks      # install via Kaggle notebook; not available on PyPI
+
+# Local / HuggingFace inference (only needed with --hf-model flag)
 transformers>=4.40.0
 huggingface_hub>=0.22.0
 torch>=2.0.0
+
+# Calibration plots (optional; required for compute_calibration_metrics)
 matplotlib>=3.7.0
-numpy>=1.24.0
-pandas>=2.0.0
-scipy>=1.10.0

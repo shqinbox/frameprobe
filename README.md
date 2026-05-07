@@ -378,6 +378,17 @@ classifier = BatchTaxonomyClassifier(taxonomy_config_path="configs/taxonomy.yaml
 analyzer = FrameProbeAnalyzer("results/data.csv", components_path="configs/components.json")
 ```
 
+### Calibration metrics (optional)
+
+If your results CSV includes a `confidence` column (float 0–1), `FrameProbeAnalyzer` can compute ECE and Brier score and save a reliability diagram:
+
+```python
+analyzer.compute_calibration_metrics(output_dir="results/sequential")
+# Prints ECE and Brier score; saves reliability_diagram.png if matplotlib is installed
+```
+
+Requires `matplotlib` (`pip install matplotlib`).
+
 ---
 
 ## Dataset
@@ -450,10 +461,21 @@ The model is downloaded automatically on first use and cached by `transformers`.
 
 ## Requirements
 
-- Python 3.9+
-- `pyyaml`
-- `pandas`
-- `statsmodels`
-- `scipy`
-- `datasets` (HuggingFace)
-- `kaggle-benchmarks` (Kaggle environment only)
+| Dependency | When needed |
+|---|---|
+| `pyyaml`, `pandas`, `numpy`, `scipy`, `statsmodels`, `datasets` | Always (core pipeline) |
+| `kaggle-benchmarks` | Kaggle environment only — not available on PyPI |
+| `transformers`, `torch`, `huggingface_hub` | Local inference only (`--hf-model` flag) |
+| `matplotlib` | Optional — only for `compute_calibration_metrics` reliability diagram |
+
+Install core dependencies:
+
+```bash
+pip install pyyaml pandas numpy scipy statsmodels datasets
+```
+
+Install for local HuggingFace inference:
+
+```bash
+pip install transformers torch huggingface_hub
+```

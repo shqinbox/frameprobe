@@ -67,7 +67,13 @@ class BaseTransformer(ABC):
         pass
 
     def run(self, input_path: str, output_path: str):
-        """Executes the transformation pipeline."""
+        """
+        Load raw records from a JSON file, transform them, and write JSONL output.
+
+        Args:
+            input_path: Path to the raw JSON input file (list of records).
+            output_path: Path for the output JSONL file (one record per line).
+        """
         with open(input_path, "r", encoding="utf-8") as f:
             raw_records = json.load(f)
 
