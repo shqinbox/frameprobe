@@ -26,8 +26,8 @@ frameprobe/
 │   ├── taxonomy_classifier.py  # Batch LLM-as-a-judge failure classifier
 │   └── analysis.py             # Statistical analysis (DAR/PRI, McNemar, logistic regression)
 ├── benchmarks/
-│   ├── run_experiment.py       # YAML-driven orchestrator (recommended)
-│   ├── run_benchmark.py        # Legacy kbench execution script
+│   ├── run_experiment.py       # YAML-driven orchestrator
+│   ├── local_runner.py         # Local / HuggingFace inference backend
 │   └── knowdobench_task.py     # kbench task definition
 ├── data/
 │   ├── base_transformer.py     # Abstract dataset transformer
