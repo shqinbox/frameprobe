@@ -8,9 +8,17 @@ Assembles the contextual prompt, queries the LLM, and evaluates the objective ac
 import json
 import threading
 from pathlib import Path
-import kaggle_benchmarks as kbench
 from engine.assembler import PromptAssembler
 from eval.accuracy import evaluate_accuracy
+
+try:
+    import kaggle_benchmarks as kbench
+except ImportError:
+    raise ImportError(
+        "kaggle-benchmarks is required to run evaluations. "
+        "This package is only available inside the Kaggle environment. "
+        "To run locally with a HuggingFace model, use the --hf-model flag with run_experiment.py."
+    )
 
 # Module-level assembler: set via configure() or lazy-loaded from default JSON
 _assembler = None

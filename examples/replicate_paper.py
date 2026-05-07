@@ -50,12 +50,13 @@ def main():
         from eval.taxonomy_classifier import BatchTaxonomyClassifier
         classifier = BatchTaxonomyClassifier(taxonomy_dict=config.get_taxonomy_dict())
         classifier.run(raw_results, cache_csv, classified_csv)
+    elif classified_csv.exists():
+        print(f"1. raw_responses.jsonl not found — using existing classified results at {classified_csv}.")
     else:
-        print(f"Warning: {raw_results} not found. Skipping taxonomy — using existing {classified_csv}.")
-
-    if not classified_csv.exists():
-        print(f"\nError: {classified_csv} not found.")
-        print("Run the evaluation on Kaggle first:")
+        print(f"\nError: No evaluation results found.")
+        print(f"  Expected raw responses at:   {raw_results}")
+        print(f"  Expected classified CSV at:  {classified_csv}")
+        print(f"\nRun the evaluation on Kaggle first:")
         print(f"  python -m benchmarks.run_experiment {args.config}")
         return
 

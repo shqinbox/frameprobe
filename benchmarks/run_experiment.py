@@ -100,9 +100,6 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     eval_df = df_base.merge(df_conditions, how="cross")
     print(f"  Total evaluation rows: {len(eval_df)}")
 
-    # --- Phase 4: Run evaluation ---
-    print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
-
     import json as _json
     raw_output_path = output_dir / "raw_responses.jsonl"
     checkpoint_path = output_dir / "checkpoint.jsonl"
@@ -112,6 +109,9 @@ def run_pipeline(config, skip_taxonomy: bool = False, skip_analysis: bool = Fals
     pressure_sequence = config.pressure_sequence if config.design == "sequential" else None
     configure(components_dict, raw_output_path=raw_output_path, pressure_sequence=pressure_sequence)
     print("[3/6] Task module configured with experiment components.")
+
+    # --- Phase 4: Run evaluation ---
+    print(f"[4/6] Running evaluation across {len(config.models)} model(s)...")
 
     # --- HuggingFace local model path ---
     if hf_model is not None:

@@ -13,7 +13,16 @@ from pathlib import Path
 import yaml
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import kaggle_benchmarks as kbench
+
+try:
+    import kaggle_benchmarks as kbench
+except ImportError:
+    raise ImportError(
+        "kaggle-benchmarks is required for taxonomy classification. "
+        "This package is only available inside the Kaggle environment. "
+        "Run taxonomy classification from a Kaggle notebook, or pass "
+        "skip_taxonomy=True to run_pipeline() to skip this phase."
+    )
 
 class BatchTaxonomyClassifier:
     def __init__(self, taxonomy_config_path: str = None, taxonomy_dict: dict = None):
@@ -66,7 +75,12 @@ Classify into EXACTLY ONE of these categories:
 {self.format_instructions}"""
 
     def classify_one(self, row: pd.Series, judge_model: str = "anthropic/claude-sonnet-4-6@default") -> dict:
-        """Executes a single classification call to the Kaggle SDK."""
+        """Executes a single classification call to the Kaggle SDK.
+
+        NOTE: The default judge (claude-sonnet-4-6) is also one of the evaluated models in the
+        paper. This self-judging setup is acknowledged as a potential bias source in the paper's
+        Limitations section. Override judge_model when evaluating claude-sonnet-4-6 results.
+        """
         try:
             prompt = self.build_prompt(row)
             
